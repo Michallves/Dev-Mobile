@@ -12,6 +12,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
         title: 'Flutter Demo',
+        debugShowCheckedModeBanner: false,
         theme: ThemeData(
           // This is the theme of your application.
           //
@@ -28,7 +29,7 @@ class MyApp extends StatelessWidget {
           //
           // This works for code too, not just values: Most code changes can be
           // tested with just a hot reload.
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
         ),
         home: HomePage());
@@ -36,22 +37,173 @@ class MyApp extends StatelessWidget {
 }
 
 class Task {
+  String imageUrl;
   String name;
-  String description;
-  String date;
+  int difficulty;
+  int _level = 0;
+
+  get levelMax {
+    return difficulty * 10;
+  }
+
+  double get progress {
+    return _level / levelMax;
+  }
 
   Task({
+    this.imageUrl = '',
     required this.name,
-    required this.description,
-    required this.date,
+    required this.difficulty,
   });
+
+  int get level => _level;
+  
+  incrementLevel(){
+    _level += 1;
+  }
 }
 
 class HomePage extends StatefulWidget {
-  HomePage({super.key});
+  const HomePage({super.key});
 
   @override
   State<HomePage> createState() => _HomePageState();
+}
+
+class TaskWidget extends StatefulWidget {
+  final Task task;
+  const TaskWidget({super.key, required this.task});
+
+  @override
+  State<TaskWidget> createState() => _TaskWidgetState();
+}
+
+class _TaskWidgetState extends State<TaskWidget> {
+  levelUp() {
+    if (widget.task.level < widget.task.levelMax) {
+      setState(() {
+        widget.task.incrementLevel();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 130,
+      decoration: const BoxDecoration(color: Colors.white),
+      child: Column(
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                SizedBox(
+                    width: 80,
+                    height: 90,
+                    child: Image.network(
+                      widget.task.imageUrl,
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                    )),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.task.name,
+                          style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                        StarsWidget(
+                          value: widget.task.difficulty,
+                        )
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Center(
+                    child: IconButton.filled(
+                        style: IconButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            shape: const RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.all(Radius.circular(4)))),
+                        onPressed: levelUp,
+                        icon: const SizedBox(
+                          height: 40,
+                          child: Column(
+                            children: [
+                              Icon(Icons.arrow_drop_up),
+                              Text(
+                                'Lvl Up',
+                                style: TextStyle(
+                                    fontSize: 10, color: Colors.white),
+                              )
+                            ],
+                          ),
+                        )),
+                  ),
+                )
+              ],
+            ),
+          ),
+          Container(
+            height: 40,
+            color: Colors.blue,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: LinearProgressIndicator(
+                    value: widget.task.progress,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(
+                  width: 16,
+                ),
+                Text(
+                  'Nível: ${widget.task.level}',
+                  style: const TextStyle(color: Colors.white),
+                )
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+}
+
+class StarsWidget extends StatelessWidget {
+  final int value;
+  const StarsWidget({super.key, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 30,
+      width: 100,
+      child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          itemCount: 5,
+          itemBuilder: (context, index) {
+            final bool painted = index < value;
+            return Icon(
+              Icons.star,
+              size: 18,
+              color: painted ? Colors.blue : Colors.grey[300],
+            );
+          }),
+    );
+  }
 }
 
 class _HomePageState extends State<HomePage> {
@@ -65,26 +217,92 @@ class _HomePageState extends State<HomePage> {
       TextEditingController();
 
   List<Task> tasks = [
-    Task(name: "Limpar a casa", description: "...", date: '04/11/2024'),
-    Task(name: "Arrumar o quarto", description: "...", date: "04/11/2024")
+    Task(
+      imageUrl:
+          'https://static6.depositphotos.com/1057968/615/i/600/depositphotos_6153518-stock-photo-cleaning.jpg',
+      name:
+          "Limpar a casa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      difficulty: 3,
+    ),
+    Task(
+      imageUrl:
+          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
+      name: "Fazer as compras",
+      difficulty: 1,
+    ),
+    Task(
+      imageUrl:
+          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
+      name: "Fazer as compras",
+      difficulty: 1,
+    ),
+    Task(
+      imageUrl:
+          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
+      name: "Fazer as compras",
+      difficulty: 1,
+    ),
+    Task(
+      imageUrl:
+          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
+      name: "Fazer as compras",
+      difficulty: 1,
+    ),
+    Task(
+      imageUrl:
+          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
+      name: "Fazer as compras",
+      difficulty: 1,
+    ),
+    Task(
+      imageUrl:
+          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
+      name: "Fazer as compras",
+      difficulty: 1,
+    ),
+    Task(
+      imageUrl:
+          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
+      name: "Fazer as compras",
+      difficulty: 1,
+    ),
+    Task(
+      imageUrl:
+          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
+      name: "Fazer as compras",
+      difficulty: 1,
+    ),
+    Task(
+      imageUrl:
+          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
+      name: "Fazer as compras",
+      difficulty: 1,
+    ),
+    Task(
+      imageUrl:
+          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
+      name: "Fazer as compras",
+      difficulty: 1,
+    )
   ];
 
   addTask() {
-    setState(() {
-      tasks.add(Task(
-          name: nameTextEditingController.text,
-          description: descriptionTextEditingController.text,
-          date: dateTextEditingController.text));
-    });
+    // setState(() {
+    //   tasks.add(Task(
+    //       name: nameTextEditingController.text,
+    //       difficulty: descriptionTextEditingController.text,
+    //       date: dateTextEditingController.text));
+    // });
     clearTextFields();
     Navigator.of(context).pop();
   }
 
-  clearTextFields(){
+  clearTextFields() {
     nameTextEditingController.clear();
     descriptionTextEditingController.clear();
     dateTextEditingController.clear();
   }
+
   showPopupAddTask(context) {
     showDialog(
         context: context,
@@ -111,7 +329,7 @@ class _HomePageState extends State<HomePage> {
                     controller: dateTextEditingController,
                   ),
                   OutlinedButton(
-                      onPressed: addTask, child: Text("Adicionar tarefa"))
+                      onPressed: addTask, child: const Text("Adicionar tarefa"))
                 ],
               ),
             ),
@@ -123,28 +341,21 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          "To-Do List",
+        title: const Text(
+          "Tarefas",
           style: TextStyle(color: Colors.white),
         ),
-        backgroundColor: Colors.red,
+        backgroundColor: Colors.blue,
       ),
-      floatingActionButton: FloatingActionButton(
-          backgroundColor: Colors.red,
-          child: Icon(
-            Icons.add,
-            color: Colors.white,
-          ),
-          onPressed: () => showPopupAddTask(context)),
-      body: ListView.builder(
+      backgroundColor: const Color.fromARGB(255, 229, 233, 231),
+      body: ListView.separated(
           itemCount: tasks.length,
+          separatorBuilder: (context, i) => const SizedBox(height: 8),
+          padding: const EdgeInsets.all(8),
           itemBuilder: (context, index) {
             final Task task = tasks[index];
-
-            return ListTile(
-              tileColor: Colors.red[100],
-              title: Text(task.name),
-              subtitle: Text('${task.description}\n${task.date}'),
+            return TaskWidget(
+              task: task,
             );
           }),
     );
