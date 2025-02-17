@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const MyApp());
@@ -7,62 +9,110 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-        title: 'Flutter Demo',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          // This is the theme of your application.
-          //
-          // TRY THIS: Try running your application with "flutter run". You'll see
-          // the application has a purple toolbar. Then, without quitting the app,
-          // try changing the seedColor in the colorScheme below to Colors.green
-          // and then invoke "hot reload" (save your changes or press the "hot
-          // reload" button in a Flutter-supported IDE, or press "r" if you used
-          // the command line to start the app).
-          //
-          // Notice that the counter didn't reset back to zero; the application
-          // state is not lost during the reload. To reset the state, use hot
-          // restart instead.
-          //
-          // This works for code too, not just values: Most code changes can be
-          // tested with just a hot reload.
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-          useMaterial3: true,
-        ),
-        home: HomePage());
+      title: 'Task Manager',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: const HomePage(),
+    );
   }
 }
 
+// Modelo da Tarefa
 class Task {
+  String id;
   String imageUrl;
   String name;
   int difficulty;
-  int _level = 0;
+  int level = 0;
 
   get levelMax {
     return difficulty * 10;
   }
 
   double get progress {
-    return _level / levelMax;
+    return level / levelMax;
   }
 
   Task({
+    required this.id,
     this.imageUrl = '',
     required this.name,
     required this.difficulty,
+    this.level = 0,
   });
 
-  int get level => _level;
+  factory Task.fromJson(Map<String, dynamic> json, String id) {
+    return Task(
+      id: id,
+      name: json["name"],
+      imageUrl: json["imageUrl"],
+      difficulty: json["difficulty"],
+      level: json["level"],
+    );
+  }
 
-  incrementLevel() {
-    _level += 1;
+  Map<String, dynamic> toJson() {
+    return {
+      "name": name,
+      "imageUrl": imageUrl,
+      "difficulty": difficulty,
+      "level": level
+    };
   }
 }
 
+// Serviço para Firebase Realtime Database
+class DatabaseService {
+  final String baseUrl =
+      "https://todo-list-c3649-default-rtdb.firebaseio.com/tasks";
+
+  Future<void> addTask(Task task) async {
+    await http.post(
+      Uri.parse("$baseUrl.json"),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode(task.toJson()),
+    );
+  }
+
+  Future<void> updateTask(Task task) async {
+    final url = "$baseUrl/${task.id}.json";
+    await http.put(
+      Uri.parse(url),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode(task.toJson()),
+    );
+  }
+
+  Future<List<Task>> getTasks() async {
+    final response = await http.get(Uri.parse("$baseUrl.json"));
+    if (response.statusCode == 200 && response.body != "null") {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return data.entries
+          .map((entry) => Task.fromJson(entry.value, entry.key))
+          .toList();
+    } else {
+      return [];
+    }
+  }
+
+  Future<void> updateTaskLevel(Task task) async {
+    final url = "$baseUrl/${task.id}.json";
+    await http.patch(
+      Uri.parse(url),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({"level": task.level}),
+    );
+  }
+
+  Future<void> deleteTask(String id) async {
+    await http.delete(Uri.parse("$baseUrl/$id.json"));
+  }
+}
+
+// Tela Principal
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -70,23 +120,188 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
+class _HomePageState extends State<HomePage> {
+  final DatabaseService dbService = DatabaseService();
+  final TextEditingController nameCtrl = TextEditingController();
+  final TextEditingController imageCtrl = TextEditingController();
+  final TextEditingController difficultyCtrl = TextEditingController();
+  List<Task> tasks = [];
+
+  @override
+  void initState() {
+    super.initState();
+    loadTasks();
+  }
+
+  void loadTasks() async {
+    tasks = await dbService.getTasks();
+    setState(() {});
+  }
+
+  void addTask() async {
+    if (nameCtrl.text.isNotEmpty && difficultyCtrl.text.isNotEmpty) {
+      final task = Task(
+        id: '',
+        name: nameCtrl.text,
+        imageUrl: imageCtrl.text,
+        difficulty: int.parse(difficultyCtrl.text),
+      );
+      await dbService.addTask(task);
+      loadTasks();
+      clearFields();
+    }
+  }
+
+  void clearFields() {
+    nameCtrl.clear();
+    imageCtrl.clear();
+    difficultyCtrl.clear();
+  }
+
+  void deleteTask(String id) async {
+    await dbService.deleteTask(id);
+    loadTasks();
+  }
+
+  void updateLevel(Task task) async {
+    if (task.level < task.levelMax) {
+      task.level = task.level + 1;
+    }
+    await dbService.updateTaskLevel(task);
+    loadTasks();
+  }
+
+  void updateTask(Task task) {
+    showUpdateTaskPopup(task);
+  }
+
+  void showAddTaskPopup() {
+    clearFields();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Adicionar Tarefa"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: "Nome")),
+              TextField(
+                  controller: imageCtrl,
+                  decoration: const InputDecoration(labelText: "Imagem URL")),
+              TextField(
+                  controller: difficultyCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: "Dificuldade")),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancelar")),
+            TextButton(
+                onPressed: () {
+                  addTask();
+                  Navigator.pop(context);
+                },
+                child: const Text("Adicionar")),
+          ],
+        );
+      },
+    );
+  }
+  showUpdateTaskPopup(Task task) {
+    nameCtrl.text = task.name;
+    imageCtrl.text = task.imageUrl;
+    difficultyCtrl.text = task.difficulty.toString();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Editar Tarefa"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: "Nome")),
+              TextField(
+                  controller: imageCtrl,
+                  decoration: const InputDecoration(labelText: "Imagem URL")),
+              TextField(
+                  controller: difficultyCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: "Dificuldade")),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancelar")),
+            TextButton(
+                onPressed: () async {
+                  task.name = nameCtrl.text;
+                  task.imageUrl = imageCtrl.text;
+                  task.difficulty = int.parse(difficultyCtrl.text);
+                  await dbService.updateTask(task);
+                  loadTasks();
+                  Navigator.pop(context);
+                },
+                child: const Text("Salvar")),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Tarefas"),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+      ),
+      floatingActionButton: FloatingActionButton(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          onPressed: showAddTaskPopup,
+          child: const Icon(Icons.add)),
+      body: tasks.isEmpty
+          ? const Center(child: CircularProgressIndicator(color: Colors.blue,))
+          : ListView.separated(
+              itemCount: tasks.length,
+              separatorBuilder: (context, i) => const SizedBox(height: 8),
+              padding: const EdgeInsets.all(8),
+              itemBuilder: (context, index) {
+                final task = tasks[index];
+                return TaskWidget(
+                    task: task, onDelete: deleteTask, onEdit: updateTask, onLevelUp: updateLevel);
+              },
+            ),
+    );
+  }
+}
 class TaskWidget extends StatefulWidget {
   final Task task;
-  const TaskWidget({super.key, required this.task});
+  final Function(String) onDelete;
+  final Function(Task) onEdit;
+  final Function(Task) onLevelUp;
+  const TaskWidget(
+      {super.key,
+      required this.task,
+      required this.onDelete,
+      required this.onEdit,
+      required this.onLevelUp});
 
   @override
   State<TaskWidget> createState() => _TaskWidgetState();
 }
 
 class _TaskWidgetState extends State<TaskWidget> {
-  levelUp() {
-    if (widget.task.level < widget.task.levelMax) {
-      setState(() {
-        widget.task.incrementLevel();
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -135,7 +350,7 @@ class _TaskWidgetState extends State<TaskWidget> {
                           shape: const RoundedRectangleBorder(
                               borderRadius:
                                   BorderRadius.all(Radius.circular(4)))),
-                      onPressed: levelUp,
+                      onPressed: () => widget.onLevelUp(widget.task),
                       icon: const Column(
                         children: [
                           Icon(
@@ -144,13 +359,33 @@ class _TaskWidgetState extends State<TaskWidget> {
                           ),
                           Text(
                             'Lvl Up',
-                            style:
-                                TextStyle(fontSize: 10, color: Colors.white),
+                            style: TextStyle(fontSize: 10, color: Colors.white),
                           )
                         ],
                       )),
                 ),
-              )
+              ),
+              PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    widget.onEdit(widget.task);
+                  } else if (value == 'delete') {
+                    widget.onDelete(widget.task.id);
+                  }
+                },
+                itemBuilder: (BuildContext context) {
+                  return [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Text('Editar'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Text('Deletar'),
+                    ),
+                  ];
+                },
+              ),
             ],
           ),
           Container(
@@ -205,161 +440,4 @@ class StarsWidget extends StatelessWidget {
     );
   }
 }
-
-class _HomePageState extends State<HomePage> {
-  final TextEditingController nameTextEditingController =
-      TextEditingController();
-
-  final TextEditingController descriptionTextEditingController =
-      TextEditingController();
-
-  final TextEditingController dateTextEditingController =
-      TextEditingController();
-
-  List<Task> tasks = [
-    Task(
-      imageUrl:
-          'https://static6.depositphotos.com/1057968/615/i/600/depositphotos_6153518-stock-photo-cleaning.jpg',
-      name:
-          "Limpar a casa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      difficulty: 3,
-    ),
-    Task(
-      imageUrl:
-          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
-      name: "Fazer as compras",
-      difficulty: 5,
-    ),
-    Task(
-      imageUrl:
-          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
-      name: "Fazer as compras",
-      difficulty: 1,
-    ),
-    Task(
-      imageUrl:
-          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
-      name: "Fazer as compras",
-      difficulty: 1,
-    ),
-    Task(
-      imageUrl:
-          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
-      name: "Fazer as compras",
-      difficulty: 1,
-    ),
-    Task(
-      imageUrl:
-          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
-      name: "Fazer as compras",
-      difficulty: 1,
-    ),
-    Task(
-      imageUrl:
-          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
-      name: "Fazer as compras",
-      difficulty: 1,
-    ),
-    Task(
-      imageUrl:
-          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
-      name: "Fazer as compras",
-      difficulty: 1,
-    ),
-    Task(
-      imageUrl:
-          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
-      name: "Fazer as compras",
-      difficulty: 1,
-    ),
-    Task(
-      imageUrl:
-          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
-      name: "Fazer as compras",
-      difficulty: 1,
-    ),
-    Task(
-      imageUrl:
-          'https://st.depositphotos.com/4218696/61575/i/600/depositphotos_615750566-stock-photo-sales-offer-happy-customers-couple.jpg',
-      name: "Fazer as compras",
-      difficulty: 1,
-    )
-  ];
-
-  addTask() {
-    // setState(() {
-    //   tasks.add(Task(
-    //       name: nameTextEditingController.text,
-    //       difficulty: descriptionTextEditingController.text,
-    //       date: dateTextEditingController.text));
-    // });
-    clearTextFields();
-    Navigator.of(context).pop();
-  }
-
-  clearTextFields() {
-    nameTextEditingController.clear();
-    descriptionTextEditingController.clear();
-    dateTextEditingController.clear();
-  }
-
-  showPopupAddTask(context) {
-    showDialog(
-        context: context,
-        builder: (context) {
-          return Dialog(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  const Text("Adicionar Tarefa"),
-                  TextFormField(
-                    decoration:
-                        const InputDecoration(hintText: "Nome da tarefa"),
-                    controller: nameTextEditingController,
-                  ),
-                  TextField(
-                    decoration:
-                        const InputDecoration(hintText: "Descrição da tarefa"),
-                    controller: descriptionTextEditingController,
-                  ),
-                  TextField(
-                    decoration:
-                        const InputDecoration(hintText: "Data da tarefa"),
-                    controller: dateTextEditingController,
-                  ),
-                  OutlinedButton(
-                      onPressed: addTask, child: const Text("Adicionar tarefa"))
-                ],
-              ),
-            ),
-          );
-        });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          "Tarefas",
-          style: TextStyle(color: Colors.white),
-        ),
-        backgroundColor: Colors.blue,
-      ),
-      backgroundColor: const Color.fromARGB(255, 229, 233, 231),
-      body: ListView.separated(
-          itemCount: tasks.length,
-          separatorBuilder: (context, i) => Container(
-                height: 8,
-              ),
-          padding: const EdgeInsets.all(8),
-          itemBuilder: (context, index) {
-            final Task task = tasks[index];
-            return TaskWidget(
-              task: task,
-            );
-          }),
-    );
-  }
-}
+  
